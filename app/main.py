@@ -2,9 +2,25 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.api.v1.endpoints import auth, contracts
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
+)
+
+# Configure CORS
+origins = [
+    "https://redline-lac-ten.vercel.app",
+    "http://localhost:3000" # keeping localhost for local dev frontend
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])
