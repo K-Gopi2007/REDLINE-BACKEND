@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 from app.core.database import get_db
@@ -326,3 +327,43 @@ def get_contract_detail(contract_id: int, db: Session = Depends(get_db), current
             "suggestions": negotiation_data.get("suggestions", []) if negotiation_data else []
         } if negotiation_report else None
     }
+
+class TemplateRequest(BaseModel):
+    template_type: str
+
+@router.post("/template", response_model=ContractResponse)
+def generate_template(
+    request: TemplateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        t_type = request.template_type.lower()
+        if t_type == "nda":
+            prompt = "Generate a standard Mutual Non-Disclosure Agreement (NDA) for a freelance designer or agency engaging with a new client. Include typical confidentiality clauses, exclusions, term of 2 years, and standard equitable relief."
+            title = "Standard NDA Template"
+        elif t_type == "msa":
+            prompt = "Generate a standard Master Services Agreement (MSA) for a boutique creative agency or software consultant. Include sections for services, payment terms, intellectual property (client owns final deliverables, agency retains pre-existing IP), warranties, limitation of liability, and termination."
+            title = "Standard MSA Template"
+        elif t_type == "sow":
+            prompt = "Generate a standard Statement of Work (SOW) template that references an MSA. Include placeholders for project description, deliverables, timeline, milestones, and payment schedule."
+            title = "Standard SOW Template"
+        else:
+            prompt = f"Generate a standard {request.template_type} legal document template."
+            title = f"{request.template_type.upper()} Template"
+
+        drafted_text = draft_agent.draft_contract(prompt)
+        
+        db_contract = Contract(
+            title=title,
+            content=drafted_text,
+            user_id=current_user.id
+        )
+        db.add(db_contract)
+        db.commit()
+        db.refresh(db_contract)
+        
+        return db_contract
+    except Exception as e:
+        logger.error(f"Error generating template: {e}")
+        raise HTTPException(status_code=500, detail=f"AI Service error: {str(e)}")
