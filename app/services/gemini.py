@@ -21,20 +21,29 @@ class GeminiService:
         config = types.GenerateContentConfig(**config_kwargs)
 
         import time
-        max_retries = 5
-        for attempt in range(max_retries):
-            try:
-                response = self.client.models.generate_content(
-                    model=self.model_id,
-                    contents=prompt,
-                    config=config
-                )
-                return response.text
-            except Exception as e:
-                if "503" in str(e) and attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)
-                    continue
-                raise
+        fallback_models = [self.model_id, 'gemini-3.5-flash', 'gemini-2.5-flash-lite']
+        last_exception = None
+
+        for model in fallback_models:
+            max_retries = 2
+            for attempt in range(max_retries):
+                try:
+                    response = self.client.models.generate_content(
+                        model=model,
+                        contents=prompt,
+                        config=config
+                    )
+                    return response.text
+                except Exception as e:
+                    last_exception = e
+                    if "503" in str(e) and attempt < max_retries - 1:
+                        time.sleep(1)
+                        continue
+                    break
+
+        if last_exception:
+            raise last_exception
+        raise Exception("Failed to generate content with all fallback models.")
 
     def generate_structured(self, prompt: str, response_schema: Type[BaseModel], system_instruction: Optional[str] = None) -> BaseModel:
         response_text = self.generate_content(prompt, system_instruction, response_schema)
