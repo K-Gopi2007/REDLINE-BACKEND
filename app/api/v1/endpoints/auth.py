@@ -7,6 +7,9 @@ from app.models.user import User
 from app.schemas.user import UserCreate, UserResponse
 from app.schemas.token import Token
 from app.api.deps import get_current_user
+from pydantic import BaseModel
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 router = APIRouter()
 
@@ -51,3 +54,29 @@ def login(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = 
 @router.get("/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+class GoogleAuthRequest(BaseModel):
+    credential: str
+
+@router.post("/google", response_model=Token)
+def google_login(request: GoogleAuthRequest, db: Session = Depends(get_db)):
+    try:
+        # Verify Google token
+        idinfo = id_token.verify_oauth2_token(request.credential, google_requests.Request())
+        email = idinfo.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="No email provided in Google token")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Google token")
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        # Create user if not exists
+        db_user = User(email=email, hashed_password="")
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        user = db_user
+
+    access_token = create_access_token(subject=user.email)
+    return {"access_token": access_token, "token_type": "bearer"}
