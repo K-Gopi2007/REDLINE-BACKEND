@@ -23,9 +23,13 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     try:
         user = db.query(User).filter(User.email == user_in.email).first()
         if user:
-            raise HTTPException(
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
                 status_code=400,
-                detail="The user with this email already exists in the system",
+                content={
+                    "error": "duplicate_email",
+                    "message": "The user with this email already exists in the system."
+                }
             )
         hashed_password = get_password_hash(user_in.password)
         db_user = User(email=user_in.email, hashed_password=hashed_password)
