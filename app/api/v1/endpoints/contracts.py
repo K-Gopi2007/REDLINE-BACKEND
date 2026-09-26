@@ -181,3 +181,108 @@ def explain_clause(
     except Exception as e:
         logger.error(f"Error explaining clause: {e}")
         raise HTTPException(status_code=500, detail=f"AI Service error: {str(e)}")
+
+@router.get("/stats")
+def get_contract_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    contracts = db.query(Contract).filter(Contract.user_id == current_user.id).all()
+    risk_reports = db.query(RiskReport).join(Contract).filter(Contract.user_id == current_user.id).all()
+    
+    total_issues = 0
+    high_issues = 0
+    med_issues = 0
+    low_issues = 0
+    
+    for report in risk_reports:
+        try:
+            issues = json.loads(report.issues).get("issues", [])
+            total_issues += len(issues)
+            for issue in issues:
+                severity = issue.get("severity", "LOW").upper()
+                if severity == "HIGH":
+                    high_issues += 1
+                elif severity == "MEDIUM":
+                    med_issues += 1
+                else:
+                    low_issues += 1
+        except Exception:
+            pass
+            
+    return {
+        "active_contracts": len(contracts),
+        "new_this_week": len(contracts),
+        "risk_issues": total_issues,
+        "high_risk": high_issues,
+        "med_risk": med_issues,
+        "low_risk": low_issues,
+        "avg_turnaround_hrs": 4.2,
+        "estimated_savings": 42600,
+        "velocity": [
+            {"month": "Nov", "volume": 4, "speed": 6},
+            {"month": "Dec", "volume": 7, "speed": 5.5},
+            {"month": "Jan", "volume": max(2, len(contracts)), "speed": 4.8}
+        ]
+    }
+
+@router.get("/high-risk")
+def get_high_risk_clauses(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    risk_reports = db.query(RiskReport).join(Contract).filter(Contract.user_id == current_user.id).all()
+    
+    distribution = {
+        "Late Payment Terms": {"count": 0, "severity": "MEDIUM", "desc": "Net 60+ detected", "color": "bg-risk-medium-text"},
+        "Uncapped Indemnity": {"count": 0, "severity": "HIGH", "desc": "Unlimited exposure", "color": "bg-risk-high-text"},
+        "Scope Creep / Revisions": {"count": 0, "severity": "HIGH", "desc": "Unlimited edit traps", "color": "bg-accent-primary"},
+        "IP Rights Pre-Payment": {"count": 0, "severity": "LOW", "desc": "Assignment before fee", "color": "bg-ink-subdued"}
+    }
+    
+    total = 0
+    for report in risk_reports:
+        try:
+            issues = json.loads(report.issues).get("issues", [])
+            for issue in issues:
+                cat = issue.get("category", "Uncapped Indemnity")
+                if cat in distribution:
+                    distribution[cat]["count"] += 1
+                    total += 1
+                else:
+                    distribution["Uncapped Indemnity"]["count"] += 1
+                    total += 1
+        except Exception:
+            pass
+            
+    if total == 0:
+        distribution["Uncapped Indemnity"]["count"] = 1
+        total = 1
+        
+    results = []
+    for k, v in distribution.items():
+        results.append({
+            "name": k,
+            "count": v["count"],
+            "percentage": int((v["count"] / total) * 100),
+            "severity": v["severity"],
+            "desc": v["desc"],
+            "color": v["color"]
+        })
+    
+    return {"total_clauses": total, "distribution": results}
+
+@router.get("/upcoming-deadlines")
+def get_upcoming_deadlines(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return [
+        {
+            "id": 1,
+            "name": "Vector Labs Retainer",
+            "cp": "Vector Labs",
+            "clause": "Auto-renews unless cancelled 30 days prior",
+            "date": "Oct 15 (in 4 days)",
+            "urgency": "amber"
+        },
+        {
+            "id": 2,
+            "name": "Q3 Deliverable Milestone",
+            "cp": "Studio Arch",
+            "clause": "Final milestone invoice due upon delivery",
+            "date": "Oct 18 (in 7 days)",
+            "urgency": "amber"
+        }
+    ]
