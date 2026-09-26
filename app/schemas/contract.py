@@ -19,6 +19,7 @@ class ContractResponse(ContractBase):
 
 class RiskIssue(BaseModel):
     clause: str
+    category: str
     severity: str
     reason: str
 

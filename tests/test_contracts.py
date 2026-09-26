@@ -96,7 +96,7 @@ def test_analyze_risk(mock_risk):
     mock_risk.return_value = RiskReportResponse(
         risk_score=50,
         risk_level="MEDIUM",
-        issues=[{"clause": "Test clause", "issue": "Test issue", "severity": "MEDIUM", "reason": "Test reason"}]
+        issues=[{"clause": "Test clause", "issue": "Test issue", "category": "General", "severity": "MEDIUM", "reason": "Test reason"}]
     )
     
     db = TestingSessionLocal()

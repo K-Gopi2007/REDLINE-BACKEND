@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # Gemini
     GEMINI_API_KEY: str = ""
     
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = ""
+    
     @property
     def sync_database_url(self) -> str:
         url = self.DATABASE_URL

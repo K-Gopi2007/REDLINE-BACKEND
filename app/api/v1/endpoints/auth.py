@@ -68,14 +68,19 @@ def google_login(request: GoogleAuthRequest, db: Session = Depends(get_db)):
     try:
         if request.credential.count('.') == 2:
             # It's a JWT
-            idinfo = id_token.verify_oauth2_token(request.credential, google_requests.Request())
+            from app.core.config import settings
+            idinfo = id_token.verify_oauth2_token(request.credential, google_requests.Request(), audience=settings.GOOGLE_CLIENT_ID if settings.GOOGLE_CLIENT_ID else None)
             email = idinfo.get("email")
         else:
             # It's an access token
-            resp = requests.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {request.credential}"})
-            if resp.status_code != 200:
+            from app.core.config import settings
+            tokeninfo_resp = requests.get(f"https://oauth2.googleapis.com/tokeninfo?access_token={request.credential}")
+            if tokeninfo_resp.status_code != 200:
                 raise ValueError("Invalid access token")
-            email = resp.json().get("email")
+            tokeninfo = tokeninfo_resp.json()
+            if settings.GOOGLE_CLIENT_ID and tokeninfo.get("aud") != settings.GOOGLE_CLIENT_ID:
+                raise ValueError("Token was not issued for this client ID")
+            email = tokeninfo.get("email")
             
         if not email:
             raise HTTPException(status_code=400, detail="No email provided in Google token")

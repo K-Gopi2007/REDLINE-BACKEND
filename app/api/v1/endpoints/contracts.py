@@ -32,6 +32,8 @@ async def upload_contract(
 ):
     try:
         content = await file.read()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large. Max size is 10MB.")
         text = ""
         
         if file.filename.endswith(".pdf"):
@@ -215,51 +217,35 @@ def get_contract_stats(db: Session = Depends(get_db), current_user: User = Depen
         "high_risk": high_issues,
         "med_risk": med_issues,
         "low_risk": low_issues,
-        "avg_turnaround_hrs": 4.2,
-        "estimated_savings": 42600,
-        "velocity": [
-            {"month": "Nov", "volume": 4, "speed": 6},
-            {"month": "Dec", "volume": 7, "speed": 5.5},
-            {"month": "Jan", "volume": max(2, len(contracts)), "speed": 4.8}
-        ]
+        "avg_turnaround_hrs": 0.0,
+        "estimated_savings": 0,
+        "velocity": []
     }
 
 @router.get("/high-risk")
 def get_high_risk_clauses(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     risk_reports = db.query(RiskReport).join(Contract).filter(Contract.user_id == current_user.id).all()
     
-    distribution = {
-        "Late Payment Terms": {"count": 0, "severity": "MEDIUM", "desc": "Net 60+ detected", "color": "bg-risk-medium-text"},
-        "Uncapped Indemnity": {"count": 0, "severity": "HIGH", "desc": "Unlimited exposure", "color": "bg-risk-high-text"},
-        "Scope Creep / Revisions": {"count": 0, "severity": "HIGH", "desc": "Unlimited edit traps", "color": "bg-accent-primary"},
-        "IP Rights Pre-Payment": {"count": 0, "severity": "LOW", "desc": "Assignment before fee", "color": "bg-ink-subdued"}
-    }
-    
+    distribution = {}
     total = 0
     for report in risk_reports:
         try:
             issues = json.loads(report.issues).get("issues", [])
             for issue in issues:
-                cat = issue.get("category", "Uncapped Indemnity")
-                if cat in distribution:
-                    distribution[cat]["count"] += 1
-                    total += 1
-                else:
-                    distribution["Uncapped Indemnity"]["count"] += 1
-                    total += 1
+                cat = issue.get("category", "General")
+                if cat not in distribution:
+                    distribution[cat] = {"count": 0, "severity": issue.get("severity", "MEDIUM"), "desc": issue.get("reason", "")[:30], "color": "bg-risk-medium-text"}
+                distribution[cat]["count"] += 1
+                total += 1
         except Exception:
             pass
             
-    if total == 0:
-        distribution["Uncapped Indemnity"]["count"] = 1
-        total = 1
-        
     results = []
     for k, v in distribution.items():
         results.append({
             "name": k,
             "count": v["count"],
-            "percentage": int((v["count"] / total) * 100),
+            "percentage": int((v["count"] / total) * 100) if total > 0 else 0,
             "severity": v["severity"],
             "desc": v["desc"],
             "color": v["color"]
@@ -269,24 +255,7 @@ def get_high_risk_clauses(db: Session = Depends(get_db), current_user: User = De
 
 @router.get("/upcoming-deadlines")
 def get_upcoming_deadlines(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return [
-        {
-            "id": 1,
-            "name": "Vector Labs Retainer",
-            "cp": "Vector Labs",
-            "clause": "Auto-renews unless cancelled 30 days prior",
-            "date": "Oct 15 (in 4 days)",
-            "urgency": "amber"
-        },
-        {
-            "id": 2,
-            "name": "Q3 Deliverable Milestone",
-            "cp": "Studio Arch",
-            "clause": "Final milestone invoice due upon delivery",
-            "date": "Oct 18 (in 7 days)",
-            "urgency": "amber"
-        }
-    ]
+    return []
 
 @router.get("/{contract_id}")
 def get_contract_detail(contract_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -329,7 +298,8 @@ def get_contract_detail(contract_id: int, db: Session = Depends(get_db), current
     }
 
 class TemplateRequest(BaseModel):
-    template_type: str
+    type: str
+    prompt: str | None = None
 
 @router.post("/template", response_model=ContractResponse)
 def generate_template(
@@ -338,7 +308,7 @@ def generate_template(
     current_user: User = Depends(get_current_user)
 ):
     try:
-        t_type = request.template_type.lower()
+        t_type = request.type.lower()
         if t_type == "nda":
             prompt = "Generate a standard Mutual Non-Disclosure Agreement (NDA) for a freelance designer or agency engaging with a new client. Include typical confidentiality clauses, exclusions, term of 2 years, and standard equitable relief."
             title = "Standard NDA Template"
@@ -349,7 +319,7 @@ def generate_template(
             prompt = "Generate a standard Statement of Work (SOW) template that references an MSA. Include placeholders for project description, deliverables, timeline, milestones, and payment schedule."
             title = "Standard SOW Template"
         else:
-            prompt = f"Generate a standard {request.template_type} legal document template."
+            prompt = f"Generate a standard {request.type} legal document template. {request.prompt if request.prompt else ''}"
             title = f"{request.template_type.upper()} Template"
 
         drafted_text = draft_agent.draft_contract(prompt)
