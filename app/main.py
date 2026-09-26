@@ -15,6 +15,7 @@ origins = [
     "http://localhost:5173",
     "https://redline-lac-ten.vercel.app",
     "https://redline-frontend-psi.vercel.app",
+    "https://redline-frontend-git-main-spideyak777-3959s-projects.vercel.app",
 ]
 
 app.add_middleware(
