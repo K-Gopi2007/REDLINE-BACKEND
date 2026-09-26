@@ -286,3 +286,43 @@ def get_upcoming_deadlines(db: Session = Depends(get_db), current_user: User = D
             "urgency": "amber"
         }
     ]
+
+@router.get("/{contract_id}")
+def get_contract_detail(contract_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    contract = db.query(Contract).filter(Contract.id == contract_id, Contract.user_id == current_user.id).first()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+        
+    risk_report = db.query(RiskReport).filter(RiskReport.contract_id == contract.id).order_by(RiskReport.id.desc()).first()
+    negotiation_report = db.query(NegotiationReport).filter(NegotiationReport.contract_id == contract.id).order_by(NegotiationReport.id.desc()).first()
+    
+    risk_data = None
+    if risk_report:
+        try:
+            risk_data = json.loads(risk_report.issues)
+        except Exception:
+            pass
+            
+    negotiation_data = None
+    if negotiation_report:
+        try:
+            negotiation_data = json.loads(negotiation_report.suggestions)
+        except Exception:
+            pass
+            
+    return {
+        "contract": {
+            "id": contract.id,
+            "title": contract.title,
+            "content": contract.content,
+            "created_at": contract.created_at
+        },
+        "risk_report": {
+            "risk_score": risk_report.risk_score if risk_report else 0,
+            "risk_level": risk_report.risk_level if risk_report else "LOW",
+            "issues": risk_data.get("issues", []) if risk_data else []
+        } if risk_report else None,
+        "negotiation_report": {
+            "suggestions": negotiation_data.get("suggestions", []) if negotiation_data else []
+        } if negotiation_report else None
+    }
