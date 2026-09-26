@@ -11,8 +11,10 @@ app = FastAPI(
 
 # Configure CORS
 origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
     "https://redline-lac-ten.vercel.app",
-    "http://localhost:3000" # keeping localhost for local dev frontend
+    "https://redline-frontend-psi.vercel.app",
 ]
 
 app.add_middleware(
