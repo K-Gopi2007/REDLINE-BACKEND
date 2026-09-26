@@ -20,12 +20,21 @@ class GeminiService:
             
         config = types.GenerateContentConfig(**config_kwargs)
 
-        response = self.client.models.generate_content(
-            model=self.model_id,
-            contents=prompt,
-            config=config
-        )
-        return response.text
+        import time
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model_id,
+                    contents=prompt,
+                    config=config
+                )
+                return response.text
+            except Exception as e:
+                if "503" in str(e) and attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                raise
 
     def generate_structured(self, prompt: str, response_schema: Type[BaseModel], system_instruction: Optional[str] = None) -> BaseModel:
         response_text = self.generate_content(prompt, system_instruction, response_schema)
