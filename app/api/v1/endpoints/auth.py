@@ -60,10 +60,19 @@ class GoogleAuthRequest(BaseModel):
 
 @router.post("/google", response_model=Token)
 def google_login(request: GoogleAuthRequest, db: Session = Depends(get_db)):
+    import requests
     try:
-        # Verify Google token
-        idinfo = id_token.verify_oauth2_token(request.credential, google_requests.Request())
-        email = idinfo.get("email")
+        if request.credential.count('.') == 2:
+            # It's a JWT
+            idinfo = id_token.verify_oauth2_token(request.credential, google_requests.Request())
+            email = idinfo.get("email")
+        else:
+            # It's an access token
+            resp = requests.get("https://www.googleapis.com/oauth2/v3/userinfo", headers={"Authorization": f"Bearer {request.credential}"})
+            if resp.status_code != 200:
+                raise ValueError("Invalid access token")
+            email = resp.json().get("email")
+            
         if not email:
             raise HTTPException(status_code=400, detail="No email provided in Google token")
     except ValueError:
