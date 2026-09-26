@@ -7,7 +7,7 @@ from pydantic import BaseModel
 class GeminiService:
     def __init__(self):
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        self.model_id = 'gemini-1.5-flash'
+        self.model_id = 'gemini-3.8-flash'
 
     def generate_content(self, prompt: str, system_instruction: Optional[str] = None, response_schema: Optional[Any] = None) -> str:
         config_kwargs = {}
